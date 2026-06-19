@@ -76,6 +76,17 @@ npm test           # 優先度ロジックのユニットテスト
 4. テナント詳細で**4フラグ**を入力。活動を記録すると接触=有に、受注を追加すると受注=有に自動同期。
 5. **今日攻める**タブに優先度順で並ぶ。
 
+## デプロイ（Vercel）
+
+`vercel.json` 同梱済み（SPAルーティング用の rewrite を設定）。初回のみ手動連携が必要。
+
+1. [vercel.com](https://vercel.com) にGitHubでログイン → **Add New → Project**。
+2. このリポジトリ（`Yohtaro0722/veritas`）を **Import**。
+3. Framework は **Vite** が自動検出（Build: `npm run build` / Output: `dist`）。そのまま **Deploy**。
+4. 任意で **Settings → Environment Variables** に `VITE_HOUJIN_APP_ID` を追加（法人番号補完を使う場合）。
+
+以降は本ブランチ／main への push で自動デプロイ。HTTPS が付くため PWA インストールとオフラインが有効になる。
+
 ## オフライン/PWA
 
 - HTTPS 必須（PWA / Service Worker）。Vercel 等へデプロイして利用。
