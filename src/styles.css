@@ -135,6 +135,21 @@ label {
   background: #0b1220;
 }
 
+/* ビル名ツールチップ：航空写真の上でも読めるよう大きめ＆高コントラスト */
+.leaflet-tooltip.bldg-tip {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  background: #ffe600;
+  border: none;
+  border-radius: 8px;
+  padding: 4px 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.leaflet-tooltip.bldg-tip::before {
+  border-top-color: #ffe600;
+}
+
 .map-banner {
   position: absolute;
   top: calc(8px + var(--safe-top));

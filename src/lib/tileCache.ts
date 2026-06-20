@@ -1,16 +1,14 @@
 import type { BBox, OverpassBuilding } from './overpass';
 import { fetchBuildings } from './overpass';
 import { upsertBuildingByOsm } from '../db/db';
+import { TILE_SOURCES, tileUrl, type TileLayerId } from './tiles';
 
 // エリア事前ダウンロード（§5.5）。準備モードで矩形範囲の
 // 地図タイル＋建物ポリゴンを取得し、オフラインでも地図・タップが効く状態を作る。
 // タイルは fetch することで Workbox の runtimeCaching(gsi-tiles) に乗る。
+// 航空写真・淡色地図の両方を取得し、現場での表示切替がオフラインでも効くようにする。
 
-export const GSI_TILE_BASE = 'https://cyberjapandata.gsi.go.jp/xyz/std';
-
-export function tileUrl(z: number, x: number, y: number): string {
-  return `${GSI_TILE_BASE}/${z}/${x}/${y}.png`;
-}
+const DOWNLOAD_LAYERS: TileLayerId[] = ['photo', 'pale'];
 
 // 緯度経度 → タイル座標
 function lng2tile(lng: number, z: number): number {
@@ -70,14 +68,18 @@ export async function downloadArea(
   const zooms = opts.zooms ?? [15, 16, 17, 18];
   const concurrency = opts.concurrency ?? 6;
   const ranges = tileRangesForBBox(bbox, zooms);
-  const total = countTiles(ranges);
+  // 航空写真・淡色地図の2レイヤー分を取得するので合計枚数も掛ける。
+  const total = countTiles(ranges) * DOWNLOAD_LAYERS.length;
 
   // --- タイル ---
   const urls: string[] = [];
-  for (const r of ranges) {
-    for (let x = r.xMin; x <= r.xMax; x++) {
-      for (let y = r.yMin; y <= r.yMax; y++) {
-        urls.push(tileUrl(r.z, x, y));
+  for (const layerId of DOWNLOAD_LAYERS) {
+    const src = TILE_SOURCES[layerId];
+    for (const r of ranges) {
+      for (let x = r.xMin; x <= r.xMax; x++) {
+        for (let y = r.yMin; y <= r.yMax; y++) {
+          urls.push(tileUrl(src, r.z, x, y));
+        }
       }
     }
   }
