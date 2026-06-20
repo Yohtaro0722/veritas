@@ -18,7 +18,8 @@ export default function BuildingDetailPage() {
   const { id } = useParams();
   const buildingId = Number(id);
   const navigate = useNavigate();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const libraryRef = useRef<HTMLInputElement>(null);
 
   const building = useLiveQuery(() => db.buildings.get(buildingId), [buildingId]);
   const photos = useLiveQuery(
@@ -64,7 +65,8 @@ export default function BuildingDetailPage() {
     for (const file of Array.from(files)) {
       await addSignboardPhoto(buildingId, file);
     }
-    if (fileRef.current) fileRef.current.value = '';
+    // 同じファイルを連続で選べるよう、操作した input をリセット
+    e.target.value = '';
   };
 
   const onAddTenant = async () => {
@@ -117,8 +119,9 @@ export default function BuildingDetailPage() {
 
       <h2>案内板の写真</h2>
       <div className="card">
+        {/* 撮影（カメラ起動）と、写真フォルダ/ライブラリから選択 の2系統 */}
         <input
-          ref={fileRef}
+          ref={cameraRef}
           className="hidden-file"
           type="file"
           accept="image/*"
@@ -126,9 +129,22 @@ export default function BuildingDetailPage() {
           multiple
           onChange={onPickPhoto}
         />
-        <button className="primary" onClick={() => fileRef.current?.click()}>
-          📷 案内板を撮影 / 追加
-        </button>
+        <input
+          ref={libraryRef}
+          className="hidden-file"
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={onPickPhoto}
+        />
+        <div className="row">
+          <button className="primary" onClick={() => cameraRef.current?.click()}>
+            📷 撮影
+          </button>
+          <button onClick={() => libraryRef.current?.click()}>
+            🖼 フォルダから選択
+          </button>
+        </div>
         {photos.length > 0 ? (
           <div className="photo-grid" style={{ marginTop: 12 }}>
             {photos.map((p) => (
