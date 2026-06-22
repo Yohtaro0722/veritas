@@ -117,6 +117,18 @@ export default function BuildingDetailPage() {
         </div>
       )}
 
+      <h2>建物攻略メモ</h2>
+      <div className="card">
+        <div className="muted" style={{ marginBottom: 6 }}>
+          受付の癖・フロア構成・空く時間帯など、2周目で効くビル固有のノウハウ。
+        </div>
+        <textarea
+          defaultValue={building.buildingMemo ?? ''}
+          placeholder="例：受付は2F、午前は不在がち。10Fまで内階段で上がれる 等"
+          onBlur={(e) => updateBuilding(buildingId, { buildingMemo: e.target.value })}
+        />
+      </div>
+
       <h2>案内板の写真</h2>
       <div className="card">
         {/* 撮影（カメラ起動）と、写真フォルダ/ライブラリから選択 の2系統 */}

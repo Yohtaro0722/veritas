@@ -1,4 +1,4 @@
-# Veritas — マップ連動 顧客管理アプリ（人材派遣ローラー営業向け）
+# Plotto — マップ連動 顧客管理アプリ（人材派遣ローラー営業向け）
 
 地図起点の顧客管理ツール。歩きながらビルをタップすると、そのビルのテナント（入居企業）
 一覧が出て、過去の活動履歴・契約状況を確認でき、**次に攻めるべき先が自動で浮かび上がる**。
@@ -81,7 +81,7 @@ npm test           # 優先度ロジックのユニットテスト
 `vercel.json` 同梱済み（SPAルーティング用の rewrite を設定）。初回のみ手動連携が必要。
 
 1. [vercel.com](https://vercel.com) にGitHubでログイン → **Add New → Project**。
-2. このリポジトリ（`Yohtaro0722/veritas`）を **Import**。
+2. このリポジトリ（`Yohtaro0722/Plotto`）を **Import**。
 3. Framework は **Vite** が自動検出（Build: `npm run build` / Output: `dist`）。そのまま **Deploy**。
 4. 任意で **Settings → Environment Variables** に `VITE_HOUJIN_APP_ID` を追加（法人番号補完を使う場合）。
 

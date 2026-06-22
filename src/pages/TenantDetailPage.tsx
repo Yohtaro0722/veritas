@@ -9,13 +9,14 @@ import {
   deleteActivity,
   upsertContract,
 } from '../db/db';
-import type { ActivityType, Flags, Order } from '../db/types';
+import type { ActivityType, ActivityResult, Flags, Order, Tenant } from '../db/types';
 import { FlagEditor } from '../components/FlagEditor';
-import { classifyPriority } from '../lib/priority';
+import { classifyProspect, isProspectActive } from '../lib/priority';
 import { isHoujinApiAvailable, searchByName, type CorporateCandidate } from '../lib/houjin';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 
 const ACTIVITY_TYPES: ActivityType[] = ['訪問', '架電', '商談', 'その他'];
+const ACTIVITY_RESULTS: ActivityResult[] = ['受付突破', '担当不在', '門前払い', '商談化', 'その他'];
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function TenantDetailPage() {
@@ -38,6 +39,7 @@ export default function TenantDetailPage() {
   // 活動ログ入力
   const [actDate, setActDate] = useState(today());
   const [actType, setActType] = useState<ActivityType>('訪問');
+  const [actResult, setActResult] = useState<ActivityResult>('担当不在');
   const [actNote, setActNote] = useState('');
 
   // 法人番号補完
@@ -60,7 +62,9 @@ export default function TenantDetailPage() {
     );
   }
 
-  const priority = classifyPriority(tenant.flags);
+  // 状態(4フラグ) × タイミング(アプローチ日) を重ねて分類（§5.4）
+  const status = classifyProspect(tenant, today());
+  const priority = status.base;
 
   const onFlagsChange = async (next: Flags) => {
     await updateTenant(tenantId, { flags: next });
@@ -69,12 +73,26 @@ export default function TenantDetailPage() {
   };
 
   const onAddActivity = async () => {
-    await addActivity({ tenantId, date: actDate, type: actType, note: actNote.trim() || undefined });
+    await addActivity({
+      tenantId,
+      date: actDate,
+      type: actType,
+      result: actResult,
+      note: actNote.trim() || undefined,
+    });
     setActNote('');
+    // 最終アプローチ日を更新（より新しい日付なら）
+    if (!tenant.lastApproachDate || actDate > tenant.lastApproachDate) {
+      await updateTenant(tenantId, { lastApproachDate: actDate });
+    }
     // 活動を記録したら「担当接触有無=有」に自動更新（自分が動いた事実）
     if (tenant.flags.contacted !== 'yes') {
       await onFlagsChange({ ...tenant.flags, contacted: 'yes' });
     }
+  };
+
+  const setTenantDate = (field: 'lastApproachDate' | 'nextApproachDate', v: string) => {
+    void updateTenant(tenantId, { [field]: v || undefined } as Partial<Tenant>);
   };
 
   const onSearchHoujin = async () => {
@@ -128,10 +146,62 @@ export default function TenantDetailPage() {
         <div className="title">{tenant.name}</div>
       </div>
 
-      {/* 優先度 */}
-      <div className="card" style={{ borderColor: priority.color }}>
+      {/* 優先度（状態）＋ タイミング（再訪期限・放置） */}
+      <div className="card" style={{ borderColor: status.revisitDue ? '#ef4444' : priority.color }}>
         <span className="badge" style={{ background: priority.color }}>{priority.label}</span>
         <div className="muted" style={{ marginTop: 8 }}>{priority.strategy}</div>
+        {status.badges.length > 0 && (
+          <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {status.badges.map((b, i) => (
+              <span
+                key={i}
+                className="badge"
+                style={{ background: status.revisitDue ? '#ef4444' : '#f59e0b', color: '#fff' }}
+              >
+                {b}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <h2>再訪・見込み管理</h2>
+      <div className="card stack">
+        <div className="flag-line">
+          <span className="k">見込みリストに含める</span>
+          <div className="seg" style={{ maxWidth: 180 }}>
+            <button
+              className={isProspectActive(tenant.isProspect) ? 'on' : ''}
+              onClick={() => updateTenant(tenantId, { isProspect: true })}
+            >
+              入れる
+            </button>
+            <button
+              className={!isProspectActive(tenant.isProspect) ? 'on' : ''}
+              onClick={() => updateTenant(tenantId, { isProspect: false })}
+            >
+              外す
+            </button>
+          </div>
+        </div>
+        <div className="row">
+          <div>
+            <label>最終アプローチ日</label>
+            <input
+              type="date"
+              value={tenant.lastApproachDate ?? ''}
+              onChange={(e) => setTenantDate('lastApproachDate', e.target.value)}
+            />
+          </div>
+          <div>
+            <label>次回アプローチ日（今日以前＝再訪期限）</label>
+            <input
+              type="date"
+              value={tenant.nextApproachDate ?? ''}
+              onChange={(e) => setTenantDate('nextApproachDate', e.target.value)}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="card">
@@ -224,6 +294,14 @@ export default function TenantDetailPage() {
           </div>
         </div>
         <div>
+          <label>結果</label>
+          <select value={actResult} onChange={(e) => setActResult(e.target.value as ActivityResult)}>
+            {ACTIVITY_RESULTS.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label>メモ</label>
           <textarea value={actNote} onChange={(e) => setActNote(e.target.value)} placeholder="どんな反応だったか等" />
         </div>
@@ -237,7 +315,7 @@ export default function TenantDetailPage() {
           activities.map((a) => (
             <div className="card" key={a.id}>
               <div className="flag-line">
-                <strong>{a.type}</strong>
+                <strong>{a.type}{a.result ? ` ・ ${a.result}` : ''}</strong>
                 <span className="muted">{a.date}</span>
               </div>
               {a.note && <div>{a.note}</div>}

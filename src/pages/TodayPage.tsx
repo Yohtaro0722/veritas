@@ -2,11 +2,12 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
-import { classifyPriority, isTodayTarget } from '../lib/priority';
+import { classifyProspect, isProspectActive, todayISO } from '../lib/priority';
 import { buildProspectsXlsx, shareOrDownload, todayStamp } from '../lib/exportProspects';
 
-// 「今日攻めるべき先」一覧（§5.4）。4フラグの仕分け結果を優先度順に表示。
-// リストは保存データから毎回算出されるため、フラグを更新すれば常に最新。
+// 「今日攻めるべき先／再訪すべき先」一覧（§5.4）。
+// 4フラグ × アプローチ日付 をルールで仕分け、再訪期限到来を最上位に浮上させる。
+// リストは保存データから毎回算出されるため、フラグ・日付を更新すれば常に最新。
 
 const EMAIL_KEY = 'plotto.reportEmail';
 
@@ -15,10 +16,11 @@ export default function TodayPage() {
     const tenants = await db.tenants.toArray();
     const buildings = await db.buildings.toArray();
     const byId = new Map(buildings.map((b) => [b.id!, b]));
+    const t0 = todayISO();
     return tenants
-      .map((t) => ({ tenant: t, priority: classifyPriority(t.flags), building: byId.get(t.buildingId) }))
-      .filter((r) => isTodayTarget(r.tenant.flags))
-      .sort((a, b) => a.priority.rank - b.priority.rank || a.tenant.name.localeCompare(b.tenant.name));
+      .filter((t) => isProspectActive(t.isProspect))
+      .map((t) => ({ tenant: t, status: classifyProspect(t, t0), building: byId.get(t.buildingId) }))
+      .sort((a, b) => a.status.sortRank - b.status.sortRank || a.tenant.name.localeCompare(b.tenant.name));
   }, [], []);
 
   const [email, setEmail] = useState(() => localStorage.getItem(EMAIL_KEY) ?? '');
@@ -58,9 +60,10 @@ export default function TodayPage() {
 
   return (
     <div className="page">
-      <h1>今日攻めるべき先</h1>
+      <h1>今日攻めるべき先 / 再訪すべき先</h1>
       <div className="muted" style={{ marginBottom: 12 }}>
-        4フラグの事実をルールで仕分けた結果です（予測ではありません）。フラグを更新すれば常に最新になります。
+        4フラグ × アプローチ日付をルールで仕分けた結果です（予測ではありません）。
+        再訪期限が来た先が最上位に浮上します。
       </div>
 
       {/* 1日の締め：Excel化してメール等へワンタップ共有 */}
@@ -87,7 +90,7 @@ export default function TodayPage() {
       {rows.length === 0 ? (
         <div className="empty">
           対象がありません。<br />
-          地図でビルをタップ → テナント登録 → 4フラグを入れると、ここに優先順で並びます。
+          地図でビルをタップ → テナント登録 → 4フラグ・アプローチ日を入れると、ここに優先順で並びます。
         </div>
       ) : (
         rows.map((r) => (
@@ -98,9 +101,14 @@ export default function TodayPage() {
                 {r.building?.name ?? '建物不明'}
                 {r.tenant.floor ? ` ・ ${r.tenant.floor}` : ''}
               </div>
-              <div className="sub" style={{ color: r.priority.color }}>{r.priority.strategy}</div>
+              <div className="sub" style={{ color: r.status.base.color }}>{r.status.base.strategy}</div>
+              {r.status.badges.length > 0 && (
+                <div className="sub" style={{ color: r.status.revisitDue ? '#ef4444' : '#f59e0b', fontWeight: 700 }}>
+                  {r.status.badges.join(' / ')}
+                </div>
+              )}
             </div>
-            <span className="badge" style={{ background: r.priority.color }}>{r.priority.label}</span>
+            <span className="badge" style={{ background: r.status.base.color }}>{r.status.base.label}</span>
           </Link>
         ))
       )}

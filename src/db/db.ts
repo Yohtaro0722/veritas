@@ -9,7 +9,7 @@ import type {
 import { DEFAULT_FLAGS } from './types';
 
 // 端末内完結の IndexedDB（Dexie）。写真も含め第三者送信なし（§6）。
-export class VeritasDB extends Dexie {
+export class PlottoDB extends Dexie {
   buildings!: Table<Building, number>;
   signboardPhotos!: Table<SignboardPhoto, number>;
   tenants!: Table<Tenant, number>;
@@ -17,7 +17,7 @@ export class VeritasDB extends Dexie {
   contracts!: Table<Contract, number>;
 
   constructor() {
-    super('veritas');
+    super('plotto');
     this.version(1).stores({
       // & は一意。複合検索用のインデックスのみ列挙。
       buildings: '++id, name, osmId, updatedAt',
@@ -26,10 +26,25 @@ export class VeritasDB extends Dexie {
       activities: '++id, tenantId, date, createdAt',
       contracts: '++id, &tenantId, updatedAt',
     });
+    // v0.2：再訪管理（isProspect / nextApproachDate）のインデックス追加。
+    this.version(2)
+      .stores({
+        tenants:
+          '++id, buildingId, corporateNumber, name, updatedAt, isProspect, nextApproachDate',
+      })
+      .upgrade(async (tx) => {
+        // 既存テナントは「見込みリスト入り」を既定 true にする。
+        await tx
+          .table('tenants')
+          .toCollection()
+          .modify((t: Tenant) => {
+            if (t.isProspect === undefined) t.isProspect = true;
+          });
+      });
   }
 }
 
-export const db = new VeritasDB();
+export const db = new PlottoDB();
 
 const now = () => Date.now();
 
@@ -90,6 +105,8 @@ export async function addTenant(
   const id = await db.tenants.add({
     ...data,
     flags: data.flags ?? { ...DEFAULT_FLAGS },
+    // 既定で見込みリスト入り（後で外せる）。
+    isProspect: data.isProspect ?? true,
     createdAt: t,
     updatedAt: t,
   });

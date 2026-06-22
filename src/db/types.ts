@@ -37,6 +37,8 @@ export interface Building {
   polygon?: [number, number][];
   /** OSM の element id（重複登録防止用・任意） */
   osmId?: string;
+  /** 建物攻略メモ：受付の癖・フロア構成・空く時間帯 等（§5.6・v0.2） */
+  buildingMemo?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -64,11 +66,25 @@ export interface Tenant {
   /** 法人番号APIで補完した正式名称 */
   formalName?: string;
   flags: Flags;
+  /** 見込みリストに入れているか（§4・v0.2）。既定はtrue。 */
+  isProspect?: boolean;
+  /** 最終アプローチ日（ISO YYYY-MM-DD・§4.2）。放置の炙り出しに使う。 */
+  lastApproachDate?: string;
+  /** 次回アプローチ日（ISO YYYY-MM-DD・§4.2）。今日以前なら再訪期限到来。 */
+  nextApproachDate?: string;
   createdAt: number;
   updatedAt: number;
 }
 
 export type ActivityType = '訪問' | '架電' | '商談' | 'その他';
+
+/** 飛び込み結果区分（§4・v0.2） */
+export type ActivityResult =
+  | '受付突破'
+  | '担当不在'
+  | '門前払い'
+  | '商談化'
+  | 'その他';
 
 /** 活動履歴 */
 export interface Activity {
@@ -77,6 +93,8 @@ export interface Activity {
   /** ISO日付（YYYY-MM-DD） */
   date: string;
   type: ActivityType;
+  /** 結果区分（受付突破/担当不在/門前払い/商談化 等・v0.2） */
+  result?: ActivityResult;
   note?: string;
   createdAt: number;
 }

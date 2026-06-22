@@ -1,4 +1,4 @@
-import type { Flags } from '../db/types';
+import type { Flags, Tenant } from '../db/types';
 
 // 見込みリストの「自動生成」の正体（§5.4）。
 // AIが予測するのではなく、現場で入れた4つの事実フラグをルールで仕分け、
@@ -115,4 +115,123 @@ export function classifyPriority(flags: Flags): PriorityResult {
 export function isTodayTarget(flags: Flags): boolean {
   const tone = classifyPriority(flags).tone;
   return tone === 'top' || tone === 'frontier' || tone === 'nurture' || tone === 'normal';
+}
+
+// --- v0.2：状態(4フラグ) × タイミング(アプローチ日) の掛け算（§5.4） ----------
+
+/** 最終アプローチからこの日数以上で「放置警告」 */
+export const STALE_DAYS = 14;
+
+export function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** ISO日付(YYYY-MM-DD)同士の経過日数。a→b の日数。 */
+export function daysBetweenISO(from: string, to: string): number {
+  const a = Date.parse(from + 'T00:00:00');
+  const b = Date.parse(to + 'T00:00:00');
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.round((b - a) / 86400000);
+}
+
+export interface ProspectInput {
+  flags: Flags;
+  lastApproachDate?: string;
+  nextApproachDate?: string;
+}
+
+export interface ProspectStatus {
+  /** 状態ベースの分類 */
+  base: PriorityResult;
+  /** 次回アプローチ日 ≦ 今日（再訪期限到来） */
+  revisitDue: boolean;
+  /** 再訪期限の超過日数（来ていなければ null） */
+  overdueDays: number | null;
+  /** 最終アプローチからの経過日数（未接触は null） */
+  daysSinceLast: number | null;
+  /** 放置警告（接触済なのに長期放置） */
+  stale: boolean;
+  /** 一覧のソートキー（小さいほど上位）。再訪期限到来は最上位に浮上。 */
+  sortRank: number;
+  /** バッジ表示用ラベル */
+  badges: string[];
+}
+
+/**
+ * 4フラグ × アプローチ日付 を重ねて再訪・放置を炙る（§5.4）。
+ * 次回アプローチ日が今日以前なら最上位、放置は警告として付与する。
+ */
+export function classifyProspect(input: ProspectInput, today = todayISO()): ProspectStatus {
+  const base = classifyPriority(input.flags);
+  const badges: string[] = [];
+
+  let revisitDue = false;
+  let overdueDays: number | null = null;
+  if (input.nextApproachDate) {
+    const d = daysBetweenISO(input.nextApproachDate, today);
+    if (d >= 0) {
+      revisitDue = true;
+      overdueDays = d;
+      badges.push(d === 0 ? '本日再訪' : `再訪期限${d}日超過`);
+    }
+  }
+
+  let daysSinceLast: number | null = null;
+  let stale = false;
+  if (input.lastApproachDate) {
+    daysSinceLast = daysBetweenISO(input.lastApproachDate, today);
+    if (daysSinceLast >= STALE_DAYS && input.flags.contacted === 'yes') {
+      stale = true;
+      badges.push(`放置${daysSinceLast}日`);
+    }
+  }
+
+  // 再訪期限到来は base.rank より優先（最上位）。超過日数が大きいほど上。
+  // sortRank: revisitDue → 0.xxx（超過大ほど小さく）、それ以外は base.rank。
+  let sortRank: number;
+  if (revisitDue) {
+    sortRank = -1000 - (overdueDays ?? 0); // 超過が大きいほど上位
+  } else {
+    sortRank = base.rank + (stale ? -0.5 : 0); // 放置はわずかに浮上
+  }
+
+  return { base, revisitDue, overdueDays, daysSinceLast, stale, sortRank, badges };
+}
+
+/** 見込みリストに出すか（isProspect 既定true ＝ undefinedも対象） */
+export function isProspectActive(isProspect: boolean | undefined): boolean {
+  return isProspect !== false;
+}
+
+// --- v0.2：ビル単位の集計（§5.5 2周目優先度） --------------------------------
+
+export interface BuildingProspectAgg {
+  /** 見込みリスト入りの企業数 */
+  prospectCount: number;
+  /** 再訪期限が今日以前のテナント数 */
+  revisitDueCount: number;
+}
+
+/** 1棟ぶんのテナントから見込み件数と再訪期限到来数を集計する */
+export function aggregateBuildingProspects(
+  tenants: Tenant[],
+  today = todayISO(),
+): BuildingProspectAgg {
+  let prospectCount = 0;
+  let revisitDueCount = 0;
+  for (const t of tenants) {
+    if (!isProspectActive(t.isProspect)) continue;
+    prospectCount++;
+    if (classifyProspect(t, today).revisitDue) revisitDueCount++;
+  }
+  return { prospectCount, revisitDueCount };
+}
+
+/** 件数→色の段階（§5.5：多いほど濃い/目立つ）。再訪期限ありは強調色。 */
+export function buildingHeatColor(agg: BuildingProspectAgg): string {
+  if (agg.revisitDueCount > 0) return '#ef4444'; // 再訪期限到来=赤で最強調
+  if (agg.prospectCount >= 5) return '#f97316';
+  if (agg.prospectCount >= 3) return '#f59e0b';
+  if (agg.prospectCount >= 1) return '#fde047';
+  return '#38bdf8'; // 見込みなし=既定の水色
 }

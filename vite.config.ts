@@ -12,8 +12,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icon.svg'],
       manifest: {
-        name: 'Veritas - ローラー営業 顧客管理',
-        short_name: 'Veritas',
+        name: 'Plotto - ローラー営業 顧客管理',
+        short_name: 'Plotto',
         description: '地図起点の顧客管理（人材派遣ローラー営業向け）',
         theme_color: '#0f172a',
         background_color: '#0f172a',

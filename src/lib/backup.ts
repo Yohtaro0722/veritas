@@ -63,7 +63,7 @@ export function downloadBackup(blob: Blob): void {
   const a = document.createElement('a');
   const stamp = new Date().toISOString().slice(0, 10);
   a.href = url;
-  a.download = `veritas-backup-${stamp}.json`;
+  a.download = `plotto-backup-${stamp}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
